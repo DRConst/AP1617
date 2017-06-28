@@ -2,10 +2,11 @@
 #include "random"
 #include "mpi.h"
 #include <iostream>
+#include <limits>
 
-int numElems = 100;
+int numElems;
 
-int *toSort = new int[numElems];
+int *toSort;
 
 int elemsPerProc;
 
@@ -13,7 +14,7 @@ void genRand()
 {
 	std::random_device rd; // obtain a random number from hardware
 	std::mt19937 eng(rd()); // seed the generator
-	std::uniform_int_distribution<> distr(0, 99999); // define the range
+	std::uniform_int_distribution<> distr(0, 100); // define the range
 
 	for (int i = 0; i<numElems; i++) {
 		toSort[i] = distr(eng);
@@ -48,6 +49,11 @@ void quicksort(int *array, int lo, int hi)
 int main(int argc, char **argv)
 {
 	
+
+	numElems = atoi(argv[1]);
+
+	toSort = new int[numElems];
+
 	// ----- MPI ----- //
 	
 
@@ -70,12 +76,33 @@ int main(int argc, char **argv)
 	{
 		genRand();
 	}
-	elemsPerProc = numElems / numProcs;
+
+
+
+	int *elemsPerProcv = new int[numProcs];
+	int *displs = new int[numProcs];
+
+
+	for(int i = 0; i < numProcs - 1; i++)
+	{
+		elemsPerProcv[i] = numElems / numProcs;
+
+		if (!i)
+			displs[0] = 0;
+		else
+			displs[i] = displs[i - 1] + elemsPerProcv[i - 1];
+	}
+
+	elemsPerProcv[numProcs - 1] = numElems / numProcs + numElems % numProcs;
+
+	elemsPerProc = elemsPerProcv[procRank];
+
+	std::cout << "Proc " << procRank << " getting " << elemsPerProc << "\n";
 
 	int *elems = new int[elemsPerProc];
 
 	//Scatter the array to all the processes
-	MPI_Scatter(toSort, elemsPerProc, MPI_INT, elems, elemsPerProc, MPI_INT, 0, MPI_COMM_WORLD);
+	MPI_Scatterv(toSort, elemsPerProcv, displs, MPI_INT, elems, elemsPerProc, MPI_INT, 0, MPI_COMM_WORLD);
 
 	delete toSort;
 
@@ -133,7 +160,7 @@ int main(int argc, char **argv)
 
 		step = numPivots;
 
-		std::cout << "Dividing in chunks of " << step;
+		/*std::cout << "Dividing in chunks of " << step;*/
 
 		j = 0;
 		//choose the pivots
@@ -142,7 +169,7 @@ int main(int argc, char **argv)
 			chosenPivots[j++] = pivots[i];
 		}
 
-		std::cout << "asdiaushdiawdih " << j << "\n\n\n";
+	/*	std::cout << "asdiaushdiawdih " << j << "\n\n\n";
 		std::cout << "Printing pivots:\n";
 		for (int i = 0; i < (numProcs - 1) * numProcs; i++)
 			std::cout << pivots[i] << " ";
@@ -154,7 +181,7 @@ int main(int argc, char **argv)
 
 		for (int i = 0; i < numPivots; i++)
 			std::cout << chosenPivots[i] << " "; 
-		std::cout << "\n\n\n";
+		std::cout << "\n\n\n";*/
 	}
 
 	//std::cout << " Broadcasting chosen pivots " << numPivots << "\n";
@@ -162,7 +189,7 @@ int main(int argc, char **argv)
 	//Broadcast the chosen pivots
 	MPI_Bcast(chosenPivots, numPivots, MPI_INT, 0, MPI_COMM_WORLD);
 
-	std::cout << " Calculating sets\n";
+	/*std::cout << " Calculating sets\n";*/
 	//Now that each proc has a pivot, partition data acordingly
 	//Each proc keeps a a list of offsets, plus a list of lenghts. There are numProcs sections
 	int *data = new int[numProcs];
@@ -226,7 +253,7 @@ int main(int argc, char **argv)
 		//The offsets are calculated to be used on top of the class offset
 		if(procRank == classProc)
 		{
-			std::cout << "Proccess " << classProc << " gathering data\n";
+			/*std::cout << "Proccess " << classProc << " gathering data\n";
 
 			std::cout << "Lens: ";
 			for (int i = 0; i < numProcs; i++)
@@ -241,7 +268,7 @@ int main(int argc, char **argv)
 			std::cout << "My Lens: ";
 			for (int i = 0; i < numProcs; i++)
 				std::cout << lens[i] << " ";
-			std::cout << "\n";
+			std::cout << "\n";*/
 			
 			for(int i = 0; i < numProcs; i++)
 			{
@@ -259,12 +286,12 @@ int main(int argc, char **argv)
 
 			recvBuff = new int[totalLen];
 
-			
+			/*
 			std::cout << "Getting " << totalLen << " elems\n";
 			std::cout << "Offsets: ";
 			for (int i = 0; i < numProcs; i++)
 				std::cout << recvOffsets[i] << " ";
-			std::cout << "\n";
+			std::cout << "\n";*/
 		}
 
 		MPI_Gatherv(&elems[data[classProc]], lens[classProc], MPI_INT, recvBuff, recvLens, recvOffsets, MPI_INT, classProc, MPI_COMM_WORLD);
@@ -273,15 +300,15 @@ int main(int argc, char **argv)
 
 		
 		if (procRank == classProc) {
-			std::cout << procRank << "\n";
+			/*std::cout << procRank << "\n";
 			std::cout << procRank << " QUICKSORT \n";
-			std::cout << "TOTAL LEN " << totalLen;
+			std::cout << "TOTAL LEN " << totalLen;*/
 			quicksort(recvBuff, 0, totalLen - 1);
-
+/*
 			std::cout << "MERGE: Proc " << procRank << " got :\n";
 			for (int i = 0; i < totalLen; i++)
 				std::cout << recvBuff[i] << " ";
-			std::cout << "\n\n";
+			std::cout << "\n\n";*/
 
 		}
 
@@ -306,7 +333,7 @@ int main(int argc, char **argv)
 	if(!procRank)
 		for(int i = 0; i < numProcs; i++)
 		{
-			std::cout << " PROC 0 GETTING " << recvLens[i] << " FROM " << i << "\n\n\n";
+			/*std::cout << " PROC 0 GETTING " << recvLens[i] << " FROM " << i << "\n\n\n";*/
 			if(!i)
 				recvOffsets[0];
 			else
@@ -315,9 +342,9 @@ int main(int argc, char **argv)
 
 	MPI_Gatherv(recvBuff, totalLen, MPI_INT, finalRes, recvLens, recvOffsets, MPI_INT, 0, MPI_COMM_WORLD);
 
-
+/*
 	std::cout << "\n";
-	std::cout << "\n"; std::cout << "\n";
+	std::cout << "\n"; std::cout << "\n";*/
 	if (!procRank)
 	{
 		//quicksort(recvBuff, 0, numElems - 1);
