@@ -3,6 +3,8 @@
 #include "mpi.h"
 #include <iostream>
 #include <limits>
+#include <ratio>
+#include <chrono>
 
 int numElems;
 
@@ -13,8 +15,8 @@ int elemsPerProc;
 void genRand()
 {
 	std::random_device rd; // obtain a random number from hardware
-	std::mt19937 eng(rd()); // seed the generator
-	std::uniform_int_distribution<> distr(0, 100); // define the range
+	std::mt19937 eng; // seed the generator
+	std::uniform_int_distribution<> distr(0, 10000000); // define the range
 
 	for (int i = 0; i<numElems; i++) {
 		toSort[i] = distr(eng);
@@ -48,7 +50,19 @@ void quicksort(int *array, int lo, int hi)
 
 int main(int argc, char **argv)
 {
-	
+	// ----- TIMES ----- //
+
+	std::chrono::duration<double, std::milli> temp_time;
+
+	// ----- Communication Times ----- //
+
+	double process_communication_time = 0.0;
+	std::chrono::high_resolution_clock::time_point start_communication_time, end_communication_time;
+
+	// ----- Execution Times ----- //
+
+	double process_execution_time = 0.0;
+	std::chrono::high_resolution_clock::time_point start_execution_time, end_execution_time;
 
 	numElems = atoi(argv[1]);
 
@@ -63,9 +77,6 @@ int main(int argc, char **argv)
 	// Get the number of processes
 	int numProcs;
 	MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
-
-	if (numProcs == 1)
-		numProcs = 2;
 	
 	// Get the rank of the process
 	int procRank;
@@ -77,7 +88,8 @@ int main(int argc, char **argv)
 		genRand();
 	}
 
-
+	// ----- START EXECUTION TIME ----- //
+	start_execution_time = std::chrono::high_resolution_clock::now();
 
 	int *elemsPerProcv = new int[numProcs];
 	int *displs = new int[numProcs];
@@ -94,15 +106,19 @@ int main(int argc, char **argv)
 	}
 
 	elemsPerProcv[numProcs - 1] = numElems / numProcs + numElems % numProcs;
-
+	displs[numProcs - 1] = displs[numProcs - 1 - 1] + elemsPerProcv[numProcs - 1  - 1];;
 	elemsPerProc = elemsPerProcv[procRank];
 
-	std::cout << "Proc " << procRank << " getting " << elemsPerProc << "\n";
+	//std::cout << "Proc " << procRank << " getting " << elemsPerProc << " from " << displs[1] << "\n";
 
 	int *elems = new int[elemsPerProc];
 
+	start_communication_time = std::chrono::high_resolution_clock::now();
 	//Scatter the array to all the processes
 	MPI_Scatterv(toSort, elemsPerProcv, displs, MPI_INT, elems, elemsPerProc, MPI_INT, 0, MPI_COMM_WORLD);
+	end_communication_time = std::chrono::high_resolution_clock::now();
+	temp_time = end_communication_time - start_communication_time;
+	process_communication_time += temp_time.count();
 
 	delete toSort;
 
@@ -143,8 +159,12 @@ int main(int argc, char **argv)
 		pivots[j++] = elems[i];
 	}
 
+	start_communication_time = std::chrono::high_resolution_clock::now();
 	//proc0 gathers all the pivots
 	MPI_Gather(pivots, numPivots, MPI_INT, pivots, numPivots, MPI_INT, 0, MPI_COMM_WORLD);
+	end_communication_time = std::chrono::high_resolution_clock::now();
+	temp_time = end_communication_time - start_communication_time;
+	process_communication_time += temp_time.count();
 
 	/*if(!procRank)
 		//print the pivots
@@ -184,10 +204,14 @@ int main(int argc, char **argv)
 		std::cout << "\n\n\n";*/
 	}
 
+	start_communication_time = std::chrono::high_resolution_clock::now();
 	//std::cout << " Broadcasting chosen pivots " << numPivots << "\n";
 	//MPI_Barrier(MPI_COMM_WORLD);
 	//Broadcast the chosen pivots
 	MPI_Bcast(chosenPivots, numPivots, MPI_INT, 0, MPI_COMM_WORLD);
+	end_communication_time = std::chrono::high_resolution_clock::now();
+	temp_time = end_communication_time - start_communication_time;
+	process_communication_time += temp_time.count();
 
 	/*std::cout << " Calculating sets\n";*/
 	//Now that each proc has a pivot, partition data acordingly
@@ -243,9 +267,12 @@ int main(int argc, char **argv)
 	for(int classProc = 0; classProc < numProcs; classProc++)
 	{
 
-		
+		start_communication_time = std::chrono::high_resolution_clock::now();
 		//classProc is equivalent to the class
 		MPI_Gather(&lens[classProc], 1, MPI_INT, recvLens, 1, MPI_INT, classProc, MPI_COMM_WORLD);
+		end_communication_time = std::chrono::high_resolution_clock::now();
+		temp_time = end_communication_time - start_communication_time;
+		process_communication_time += temp_time.count();
 
 		
 
@@ -293,8 +320,11 @@ int main(int argc, char **argv)
 				std::cout << recvOffsets[i] << " ";
 			std::cout << "\n";*/
 		}
-
+		start_communication_time = std::chrono::high_resolution_clock::now();
 		MPI_Gatherv(&elems[data[classProc]], lens[classProc], MPI_INT, recvBuff, recvLens, recvOffsets, MPI_INT, classProc, MPI_COMM_WORLD);
+		end_communication_time = std::chrono::high_resolution_clock::now();
+		temp_time = end_communication_time - start_communication_time;
+		process_communication_time += temp_time.count();
 		
 		quicksort(recvBuff, 0, totalLen - 1);
 
@@ -315,8 +345,12 @@ int main(int argc, char **argv)
 
 	}
 
+	start_communication_time = std::chrono::high_resolution_clock::now();
 	//Proc0 gathers the lengths of all the parts, should be equal to numElems
 	MPI_Gather(&totalLen, 1, MPI_INT, recvLens, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	end_communication_time = std::chrono::high_resolution_clock::now();
+	temp_time = end_communication_time - start_communication_time;
+	process_communication_time += temp_time.count();
 
 	int *finalRes = new int[numElems];
 	
@@ -340,12 +374,16 @@ int main(int argc, char **argv)
 				recvOffsets[i] = recvOffsets[i-1] + recvLens[i-1];
 		}
 
+	start_communication_time = std::chrono::high_resolution_clock::now();
 	MPI_Gatherv(recvBuff, totalLen, MPI_INT, finalRes, recvLens, recvOffsets, MPI_INT, 0, MPI_COMM_WORLD);
+	end_communication_time = std::chrono::high_resolution_clock::now();
+	temp_time = end_communication_time - start_communication_time;
+	process_communication_time += temp_time.count();
 
 /*
 	std::cout << "\n";
 	std::cout << "\n"; std::cout << "\n";*/
-	if (!procRank)
+	/*if (!procRank)
 	{
 		//quicksort(recvBuff, 0, numElems - 1);
 
@@ -353,10 +391,18 @@ int main(int argc, char **argv)
 		for (int i = 0; i < numElems; i++)
 			std::cout << finalRes[i] << " ";
 		std::cout << "\n";
+	}*/
+
+	end_execution_time = std::chrono::high_resolution_clock::now();
+	temp_time = end_execution_time - start_execution_time;
+	process_execution_time += temp_time.count();
+
+	if (!procRank) {
+		std::cout << "Total Time " << process_execution_time;
+		std::cout << "\nTotal Communication Time " << process_communication_time;
+		std::cout << "\nTotal Execution Time " << process_execution_time - process_communication_time;
+		std::cout << "\n";
 	}
-
-
-
 
 	MPI_Barrier(MPI_COMM_WORLD);
 
