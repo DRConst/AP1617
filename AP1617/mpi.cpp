@@ -109,7 +109,6 @@ int main(int argc, char **argv)
 	displs[numProcs - 1] = displs[numProcs - 1 - 1] + elemsPerProcv[numProcs - 1  - 1];;
 	elemsPerProc = elemsPerProcv[procRank];
 
-	//std::cout << "Proc " << procRank << " getting " << elemsPerProc << " from " << displs[1] << "\n";
 
 	int *elems = new int[elemsPerProc];
 
@@ -124,19 +123,6 @@ int main(int argc, char **argv)
 
 	//Each process quicksorts its elems array
 	quicksort(elems, 0, elemsPerProc - 1);
-
-	/*for (int classProc = 0; classProc < numProcs; classProc++)
-	{
-		if(classProc == 3)
-		{
-			std::cout << "Printing ordered data for proc " << procRank << "\n";
-
-
-			for (int i = 0; i < elemsPerProc; i++)
-				std::cout << elems[i] << " ";
-			std::cout << "\n\n\n";
-		}
-	}*/
 
 	//Select the local samples
 	int numPivots = numProcs - 1;
@@ -159,6 +145,7 @@ int main(int argc, char **argv)
 		pivots[j++] = elems[i];
 	}
 
+
 	start_communication_time = std::chrono::high_resolution_clock::now();
 	//proc0 gathers all the pivots
 	MPI_Gather(pivots, numPivots, MPI_INT, pivots, numPivots, MPI_INT, 0, MPI_COMM_WORLD);
@@ -166,10 +153,6 @@ int main(int argc, char **argv)
 	temp_time = end_communication_time - start_communication_time;
 	process_communication_time += temp_time.count();
 
-	/*if(!procRank)
-		//print the pivots
-		for (int i = 0; i < (numProcs - 1) * numProcs; i++)
-			std::cout << pivots[i] << " ";*/
 
 	int *chosenPivots = new int[numPivots];
 
@@ -180,40 +163,23 @@ int main(int argc, char **argv)
 
 		step = numPivots;
 
-		/*std::cout << "Dividing in chunks of " << step;*/
-
 		j = 0;
 		//choose the pivots
 		for (int i = step; i < numPivots * numProcs; i += step)
 		{
 			chosenPivots[j++] = pivots[i];
 		}
-
-	/*	std::cout << "asdiaushdiawdih " << j << "\n\n\n";
-		std::cout << "Printing pivots:\n";
-		for (int i = 0; i < (numProcs - 1) * numProcs; i++)
-			std::cout << pivots[i] << " ";
-
-		std::cout << "\n\n\n";
-
-		std::cout << "Printing chosen pivots\n";
-
-
-		for (int i = 0; i < numPivots; i++)
-			std::cout << chosenPivots[i] << " "; 
-		std::cout << "\n\n\n";*/
 	}
 
+
+
 	start_communication_time = std::chrono::high_resolution_clock::now();
-	//std::cout << " Broadcasting chosen pivots " << numPivots << "\n";
 	//MPI_Barrier(MPI_COMM_WORLD);
 	//Broadcast the chosen pivots
 	MPI_Bcast(chosenPivots, numPivots, MPI_INT, 0, MPI_COMM_WORLD);
 	end_communication_time = std::chrono::high_resolution_clock::now();
 	temp_time = end_communication_time - start_communication_time;
 	process_communication_time += temp_time.count();
-
-	/*std::cout << " Calculating sets\n";*/
 	//Now that each proc has a pivot, partition data acordingly
 	//Each proc keeps a a list of offsets, plus a list of lenghts. There are numProcs sections
 	int *data = new int[numProcs];
@@ -235,27 +201,7 @@ int main(int argc, char **argv)
 	lens[numProcs - 1] = elemsPerProc - currentPos;
 
 
-	/*for (int classProc = 0; classProc < numProcs; classProc++)
-	{
-		if (classProc == 3)
-		{
-			std::cout << "Printing sets data for proc " << procRank << "\n";
-
-			for(int i = 0; i < numProcs; i++)
-			{
-				std::cout << "Set " << i << "\n";
-				for (int j = 0; j < lens[i]; j++)
-					std::cout << elems[data[i] + j] << " ";
-
-				std::cout << "\n\n";
-			}
-		}
-	}*/
-
 	MPI_Barrier(MPI_COMM_WORLD);
-/*
-	
-	*/
 
 
 	int *recvLens = new int[numProcs];
@@ -266,7 +212,6 @@ int main(int argc, char **argv)
 
 	for(int classProc = 0; classProc < numProcs; classProc++)
 	{
-
 		start_communication_time = std::chrono::high_resolution_clock::now();
 		//classProc is equivalent to the class
 		MPI_Gather(&lens[classProc], 1, MPI_INT, recvLens, 1, MPI_INT, classProc, MPI_COMM_WORLD);
@@ -280,22 +225,6 @@ int main(int argc, char **argv)
 		//The offsets are calculated to be used on top of the class offset
 		if(procRank == classProc)
 		{
-			/*std::cout << "Proccess " << classProc << " gathering data\n";
-
-			std::cout << "Lens: ";
-			for (int i = 0; i < numProcs; i++)
-				std::cout << recvLens[i] << " ";
-			std::cout << "\n";
-
-			std::cout << "My Data: ";
-			for (int i = 0; i < numProcs; i++)
-				std::cout << lens[i] << " ";
-			std::cout << "\n";
-
-			std::cout << "My Lens: ";
-			for (int i = 0; i < numProcs; i++)
-				std::cout << lens[i] << " ";
-			std::cout << "\n";*/
 			
 			for(int i = 0; i < numProcs; i++)
 			{
@@ -310,40 +239,30 @@ int main(int argc, char **argv)
 					recvOffsets[i] = recvOffsets[i - 1] + recvLens[i - 1];
 				}
 			}
-
+			
 			recvBuff = new int[totalLen];
 
-			/*
-			std::cout << "Getting " << totalLen << " elems\n";
-			std::cout << "Offsets: ";
-			for (int i = 0; i < numProcs; i++)
-				std::cout << recvOffsets[i] << " ";
-			std::cout << "\n";*/
 		}
+
 		start_communication_time = std::chrono::high_resolution_clock::now();
 		MPI_Gatherv(&elems[data[classProc]], lens[classProc], MPI_INT, recvBuff, recvLens, recvOffsets, MPI_INT, classProc, MPI_COMM_WORLD);
 		end_communication_time = std::chrono::high_resolution_clock::now();
 		temp_time = end_communication_time - start_communication_time;
 		process_communication_time += temp_time.count();
 		
+
 		quicksort(recvBuff, 0, totalLen - 1);
 
 		
 		if (procRank == classProc) {
-			/*std::cout << procRank << "\n";
-			std::cout << procRank << " QUICKSORT \n";
-			std::cout << "TOTAL LEN " << totalLen;*/
+
 			quicksort(recvBuff, 0, totalLen - 1);
-/*
-			std::cout << "MERGE: Proc " << procRank << " got :\n";
-			for (int i = 0; i < totalLen; i++)
-				std::cout << recvBuff[i] << " ";
-			std::cout << "\n\n";*/
 
 		}
 
 
 	}
+
 
 	start_communication_time = std::chrono::high_resolution_clock::now();
 	//Proc0 gathers the lengths of all the parts, should be equal to numElems
@@ -351,6 +270,8 @@ int main(int argc, char **argv)
 	end_communication_time = std::chrono::high_resolution_clock::now();
 	temp_time = end_communication_time - start_communication_time;
 	process_communication_time += temp_time.count();
+
+
 
 	int *finalRes = new int[numElems];
 	
@@ -360,19 +281,20 @@ int main(int argc, char **argv)
 			finalRes[i] = -1;
 		}
 
-	delete recvOffsets;
+	delete[] recvOffsets;
 
 	recvOffsets = new int[numProcs];
 
 	if(!procRank)
 		for(int i = 0; i < numProcs; i++)
 		{
-			/*std::cout << " PROC 0 GETTING " << recvLens[i] << " FROM " << i << "\n\n\n";*/
+			
 			if(!i)
-				recvOffsets[0];
+				recvOffsets[0] = 0;
 			else
 				recvOffsets[i] = recvOffsets[i-1] + recvLens[i-1];
 		}
+	
 
 	start_communication_time = std::chrono::high_resolution_clock::now();
 	MPI_Gatherv(recvBuff, totalLen, MPI_INT, finalRes, recvLens, recvOffsets, MPI_INT, 0, MPI_COMM_WORLD);
@@ -380,18 +302,7 @@ int main(int argc, char **argv)
 	temp_time = end_communication_time - start_communication_time;
 	process_communication_time += temp_time.count();
 
-/*
-	std::cout << "\n";
-	std::cout << "\n"; std::cout << "\n";*/
-	/*if (!procRank)
-	{
-		//quicksort(recvBuff, 0, numElems - 1);
 
-		std::cout << "  FINAL Proc " << procRank << " got :\n";
-		for (int i = 0; i < numElems; i++)
-			std::cout << finalRes[i] << " ";
-		std::cout << "\n";
-	}*/
 
 	end_execution_time = std::chrono::high_resolution_clock::now();
 	temp_time = end_execution_time - start_execution_time;
@@ -405,7 +316,6 @@ int main(int argc, char **argv)
 	}
 
 	MPI_Barrier(MPI_COMM_WORLD);
-
 
 	MPI_Finalize();
 
